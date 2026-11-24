@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL,
   headers: {
-    Authorization: `Bearer ${process.env.NEXT_PUBLIC_API_AUTH_TOKEN}`,
+    Authorization: `Bearer yr^voVolfSx8Xn*^`,
   },
 })
 

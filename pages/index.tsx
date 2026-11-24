@@ -171,7 +171,7 @@ export default function LoginPage() {
                   />
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'center' }}>
-                  <ReCAPTCHA sitekey="6Lf2yLYpAAAAAG0mtVbNixrG5_AmWnpahONYCEej" onChange={checkBot} />
+                  <ReCAPTCHA sitekey="6LcjBDAuAAAAAJgMwxztnCcr1OvFqDC6307Mu79D" onChange={checkBot} />
                 </div>
                 <br />
                 <Button
