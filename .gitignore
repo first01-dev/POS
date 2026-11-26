@@ -1,3 +1,4 @@
+
 # Dependencies
 node_modules/
 
@@ -30,4 +31,3 @@ pnpm-debug.log*
 
 # TypeScript
 *.tsbuildinfo
-next-env.d.ts

@@ -9,7 +9,7 @@ import {
   ProductDetail,
   Store as StoreType,
 } from '@/models/type'
-import { api } from '@/services/AxiosUtils'
+import { api, apiProductPromotion } from '@/services/AxiosUtils'
 import { loadingAnimationSuccess, Search, SearchIconWrapper, SelectInputBase } from '@/services/StyleUtils'
 import {
   AccountCircle,
@@ -81,6 +81,7 @@ import { useRouter } from 'next/router'
 import Lottie from 'react-lottie'
 import { v4 as uuidv4 } from 'uuid'
 import mypic from '../assets/images/12E22EBE-6E62-4149-ADEA-18C16948C5C5_1_201_a.jpeg'
+import axios from 'axios'
 
 export default function Cashier() {
   const router = useRouter()
@@ -93,6 +94,7 @@ export default function Cashier() {
   const [order, setOrder] = React.useState<any>()
   const [billOrder, setBillOrder] = React.useState<any>()
   const [couponInfo, setCouponInfo] = React.useState<any>([])
+  const [unavailableProductIds, setUnavailableProductIds] = React.useState<number[]>([])
   const [timeStamp, setTimeStamp] = React.useState(0)
 
   const [openBill, setOpenbill] = React.useState(false)
@@ -176,42 +178,36 @@ export default function Cashier() {
     return sumAll(cartItems, 'product_sell')
   }
 
-  
-const recalculateItem = (item: CartItem): CartItem => {
-  const quantity = Number(item.quantity || 1)
-  const currentTime = new Date()
+  const recalculateItem = (item: CartItem): CartItem => {
+    const quantity = Number(item.quantity || 1)
+    const currentTime = new Date()
 
-  const isPartner = item.product_type === 'พาร์ทเนอร์'
+    const isPartner = item.product_type === 'พาร์ทเนอร์'
 
-  const basePriceUnit = isPartner
-    ? Number(item.product_sell_price || item.product_price || 0)
-    : Number(item.product_price_unit || item.product_price || 0)
+    const basePriceUnit = isPartner
+      ? Number(item.product_sell_price || item.product_price || 0)
+      : Number(item.product_price_unit || item.product_price || 0)
 
-  const pricePerUnit = isPartner
-    ? basePriceUnit
-    : Number(item.product_sell_price || 0)
+    const pricePerUnit = isPartner ? basePriceUnit : Number(item.product_sell_price || 0)
 
-  const totalPrice = basePriceUnit * quantity
-  const totalSell = pricePerUnit * quantity
+    const totalPrice = basePriceUnit * quantity
+    const totalSell = pricePerUnit * quantity
 
-  return {
-    ...item,
+    return {
+      ...item,
 
-    product_price_unit: basePriceUnit,
-    product_price: totalPrice,
+      product_price_unit: basePriceUnit,
+      product_price: totalPrice,
 
-    product_sell_price: pricePerUnit,
-    product_sell: totalSell,
+      product_sell_price: pricePerUnit,
+      product_sell: totalSell,
 
-    product_discount: isPartner
-      ? 0
-      : (basePriceUnit - pricePerUnit) * quantity,
+      product_discount: isPartner ? 0 : (basePriceUnit - pricePerUnit) * quantity,
 
-    quantity,
-    added_time: currentTime,
+      quantity,
+      added_time: currentTime,
+    }
   }
-}
-
 
   const getCoupon = async (code: string) => {
     try {
@@ -238,7 +234,53 @@ const recalculateItem = (item: CartItem): CartItem => {
         return
       }
 
-      setPromoCode(code) // เก็บเมื่อใช้สำเร็จ
+      // ตรวจสอบคูปองส่วนลด 100%
+
+      if (couponInfo.discount_type === 'percentage' && Number(couponInfo.discount_value) === 100) {
+        const checkedProducts = await Promise.all(
+          cartItems.map(async (item: CartItem) => {
+            try {
+              const res = await apiProductPromotion.get('/products/promo', {
+                params: {
+                  'search[value]': String(item.product_barcode),
+                  draw: '1',
+                  start: 0,
+                  length: 10,
+                },
+              })
+
+              const products = res.data.data || []
+
+              const isAvailable = products.some(
+                (product: any) => String(product.barcode) === String(item.product_barcode)
+              )
+
+              return {
+                product_id: Number(item.product_id),
+                isAvailable,
+              }
+            } catch (error) {
+              console.error('ตรวจสอบสินค้าไม่สำเร็จ:', item.product_id, error)
+
+              return {
+                product_id: Number(item.product_id),
+                isAvailable: true,
+              }
+            }
+          })
+        )
+
+        const unavailableIds = checkedProducts.filter((item) => !item.isAvailable).map((item) => item.product_id)
+
+        setUnavailableProductIds(unavailableIds)
+
+        // ถ้ามีสินค้าไม่เข้าร่วมโปรโมชั่น ให้แจ้งเตือน
+        if (unavailableIds.length > 0) {
+          toast.error('มีสินค้าที่ไม่เข้าร่วมโปรโมชั่น')
+        }
+      }
+
+      setPromoCode(code)
       setDiscountCoupon(couponInfo)
     } catch (error) {
       toast.error('เกิดข้อผิดพลาดในการใช้คูปอง')
@@ -246,60 +288,45 @@ const recalculateItem = (item: CartItem): CartItem => {
   }
 
   const calculateCouponDiscount = (price: number) => {
-  if (!discountCoupon) return 0
+    if (!discountCoupon) return 0
 
-  const rule = discountCoupon.rule
-    ? JSON.parse(discountCoupon.rule)
-    : {}
+    const rule = discountCoupon.rule ? JSON.parse(discountCoupon.rule) : {}
 
-  if (
-    rule.order_amount_min != null &&
-    price < Number(rule.order_amount_min)
-  ) {
-    return 0
+    if (rule.order_amount_min != null && price < Number(rule.order_amount_min)) {
+      return 0
+    }
+
+    let discount = 0
+
+    switch (discountCoupon.discount_type) {
+      case 'percentage':
+        discount = Math.round((price * Number(discountCoupon.discount_value)) / 100)
+        break
+
+      case 'fixed':
+        discount = Number(discountCoupon.discount_value)
+        break
+    }
+
+    if (discountCoupon.discount_max != null) {
+      discount = Math.min(discount, Number(discountCoupon.discount_max))
+    }
+
+    return Math.min(discount, price)
   }
-
-  let discount = 0
-
-  switch (discountCoupon.discount_type) {
-    case 'percentage':
-      discount = Math.round(
-        (price * Number(discountCoupon.discount_value)) / 100
-      )
-      break
-
-    case 'fixed':
-      discount = Number(discountCoupon.discount_value)
-      break
-  }
-
-  if (discountCoupon.discount_max != null) {
-    discount = Math.min(
-      discount,
-      Number(discountCoupon.discount_max)
-    )
-  }
-
-  return Math.min(discount, price)
-}
 
   const calculateTotalDiscount = (items: CartItem[]) =>
     items.reduce((sum, item) => sum + Number(item.product_discount || 0), 0)
 
   // [Medthod] - จัดการค่าจัดส่ง
-  
+
   const getShippingCost = () => {
-  const totalDelivery = sumAllWithCondition(
-    cartItems,
-    'product_sell',
-    'sent_type',
-    'delivery'
-  )
+    const totalDelivery = sumAllWithCondition(cartItems, 'product_sell', 'sent_type', 'delivery')
 
-  if (totalDelivery === 0) return 0
+    if (totalDelivery === 0) return 0
 
-  return totalDelivery > 700 ? 0 : 50
-}
+    return totalDelivery > 700 ? 0 : 50
+  }
 
   const buffetPrices: Record<string, number> = {
     buffet299: 299,
@@ -469,28 +496,25 @@ const recalculateItem = (item: CartItem): CartItem => {
     setCustomer({ ...customer, bod: value })
   }
 
-
-// [Method] - ลบสินค้าทั้งหมดในตะกร้า
-const handleRemoveAll = () => {
-  setCartItems([])
-  setSentType('normal')
-  setOpenDeleteAllCart(false)
-}
-
-// [Method] - ลบสินค้าในตะกร้า
-const handleRemoveFromCart = () => {
-  const newCartItems = cartItems.filter(
-    (value: any) => value.product_id !== productDeleteId
-  )
-
-  setCartItems(newCartItems)
-
-  if (newCartItems.length === 0) {
+  // [Method] - ลบสินค้าทั้งหมดในตะกร้า
+  const handleRemoveAll = () => {
+    setCartItems([])
     setSentType('normal')
+    setOpenDeleteAllCart(false)
   }
 
-  setOpenDeleteItemCart(false)
-}
+  // [Method] - ลบสินค้าในตะกร้า
+  const handleRemoveFromCart = () => {
+    const newCartItems = cartItems.filter((value: any) => value.product_id !== productDeleteId)
+
+    setCartItems(newCartItems)
+
+    if (newCartItems.length === 0) {
+      setSentType('normal')
+    }
+
+    setOpenDeleteItemCart(false)
+  }
 
   const handleAddToCart = (item: CartItem) => {
     const currentTime = new Date()
@@ -830,64 +854,46 @@ const handleRemoveFromCart = () => {
   }
 
   const preCheckOut = async () => {
-  const itemLess = cartItems.filter(
-    (item: any) => Number(item.product_quantity) < item.quantity
-  )
+    const itemLess = cartItems.filter((item: any) => Number(item.product_quantity) < item.quantity)
 
-  const soldOut = cartItems.filter(
-    (item: any) => Number(item.product_quantity) === 0
-  )
+    const soldOut = cartItems.filter((item: any) => Number(item.product_quantity) === 0)
 
-  const buffetBook = cartItems.filter(
-    (item: CartItem) => item.product_type !== 'บุฟเฟ่ต์'
-  )
+    const buffetBook = cartItems.filter((item: CartItem) => item.product_type !== 'บุฟเฟ่ต์')
 
-  const isBuffet = [
-    'buffet299',
-    'buffet349',
-    'buffet399',
-    'buffet499',
-    'buffet699',
-  ].includes(sentType)
+    const isBuffet = ['buffet299', 'buffet349', 'buffet399', 'buffet499', 'buffet699'].includes(sentType)
 
-
-  if (cartItems.length === 0) {
-    toast.error('กรุณาเลือกสินค้า')
-  } else if (itemLess.length > 0 && sentType === 'normal') {
-    for (const item of itemLess) {
-      toast.error(
-        `สินค้า "${item.product_name}" มีจำนวนคงเหลือไม่เพียงพอ กรุณาเลือกการสั่งซื้อแบบ "รับที่ร้าน" หรือ "จัดส่งที่บ้าน"`
-      )
+    if (cartItems.length === 0) {
+      toast.error('กรุณาเลือกสินค้า')
+    } else if (itemLess.length > 0 && sentType === 'normal') {
+      for (const item of itemLess) {
+        toast.error(
+          `สินค้า "${item.product_name}" มีจำนวนคงเหลือไม่เพียงพอ กรุณาเลือกการสั่งซื้อแบบ "รับที่ร้าน" หรือ "จัดส่งที่บ้าน"`
+        )
+      }
+    } else if (soldOut.length > 0 && isBuffet) {
+      for (const item of soldOut) {
+        toast.error(`สินค้า "${item.product_name}" สินค้าหมด`)
+      }
+    } else if (isBuffet && buffetBook.length > 0) {
+      for (const item of buffetBook) {
+        toast.error(`สินค้า "${item.product_name}" ไม่ใช่บุฟเฟ่ต์`)
+      }
+    } else if ((sentType === 'recive_store' || sentType === 'delivery') && selectedCustomer.id === 1) {
+      toast.error('กรุณาเลือกลูกค้า ที่ไม่ใช่ลูกค้าทั่วไป')
+    } else if (
+      sentType === 'delivery' &&
+      (!selectedCustomer.province ||
+        selectedCustomer.province === 'null' ||
+        !selectedCustomer.sub_district ||
+        selectedCustomer.sub_district === 'null')
+    ) {
+      toast.error('กรุณาแก้ไขที่อยู่ลูกค้า')
+    } else if (sentType === 'recive_store' && !selectedCustomer.phone) {
+      toast.error('กรุณาแก้ไขเบอร์โทรศัพท์')
+    } else {
+      setOpenDialogCheckOut(true)
     }
-  } else if (soldOut.length > 0 && isBuffet) {
-    for (const item of soldOut) {
-      toast.error(`สินค้า "${item.product_name}" สินค้าหมด`)
-    }
-  } else if (isBuffet && buffetBook.length > 0) {
-    for (const item of buffetBook) {
-      toast.error(`สินค้า "${item.product_name}" ไม่ใช่บุฟเฟ่ต์`)
-    }
-  } else if (
-    (sentType === 'recive_store' || sentType === 'delivery') &&
-    selectedCustomer.id === 1
-  ) {
-    toast.error('กรุณาเลือกลูกค้า ที่ไม่ใช่ลูกค้าทั่วไป')
-  } else if (
-    sentType === 'delivery' &&
-    (
-      !selectedCustomer.province ||
-      selectedCustomer.province === 'null' ||
-      !selectedCustomer.sub_district ||
-      selectedCustomer.sub_district === 'null'
-    )
-  ) {
-    toast.error('กรุณาแก้ไขที่อยู่ลูกค้า')
-  } else if (sentType === 'recive_store' && !selectedCustomer.phone) {
-    toast.error('กรุณาแก้ไขเบอร์โทรศัพท์')
-  } else {
-    setOpenDialogCheckOut(true)
   }
-}
 
   // [Method] - ดึงข้อมูลลูกค้าid=1(ผู้ใช้ทั่วไป)
   const getCustomerInit = async () => {
@@ -1312,6 +1318,12 @@ const handleRemoveFromCart = () => {
   }, [discountCoupon])
 
   React.useEffect(() => {
+    if (!promoCode) {
+      setUnavailableProductIds([])
+    }
+  }, [promoCode])
+
+  React.useEffect(() => {
     const token = getLocalStorage(key.TOKEN)
     if (!token) return
 
@@ -1347,7 +1359,6 @@ const handleRemoveFromCart = () => {
     } else {
     }
   }, [isBrowser])
-
 
   return (
     <div>
@@ -1632,6 +1643,9 @@ const handleRemoveFromCart = () => {
               {cartItems &&
                 cartItems.map((item: any, index: number) => {
                   const isBuffet = item.product_type === 'บุฟเฟ่ต์'
+
+                  const isUnavailable = unavailableProductIds.includes(Number(item.product_id))
+
                   const shouldHighlight =
                     (sentType === 'buffet299' ||
                       sentType === 'buffet399' ||
@@ -1642,9 +1656,9 @@ const handleRemoveFromCart = () => {
 
                   return (
                     <div
-                      className="bg-gray rounded-20 mt-10 "
+                      className="bg-gray rounded-20 mt-10"
                       key={index}
-                      style={shouldHighlight ? { border: '2px solid red' } : {}}>
+                      style={isUnavailable || shouldHighlight ? { border: '2px solid #fe5454' } : {}}>
                       <div className="justify-between p-10">
                         <Typography className="ellipsis3">{item.product_name}</Typography>
                         <div className="justify-between items-center">
@@ -1774,7 +1788,10 @@ const handleRemoveFromCart = () => {
               <Button
                 className="btn-confirm w-full"
                 variant="contained"
-                disabled={getTotalQuantity === 0}
+                disabled={
+                  getTotalQuantity === 0 ||
+                  cartItems.some((item: CartItem) => unavailableProductIds.includes(Number(item.product_id)))
+                }
                 onClick={preCheckOut}>
                 <Typography sx={{ fontSize: '60px' }}>{formatBalance(getNetTotalPrice())}</Typography>
               </Button>

@@ -1,4 +1,4 @@
-export const version = 'V1.8.4 Build-2026181503'
+export const version = 'V1.10.0 Build-2026261001'
 
 export const EXPIRE_TIME = 12
 export const EXPIRE_TIME_UNIT = 'hour'

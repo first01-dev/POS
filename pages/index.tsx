@@ -29,9 +29,6 @@ import ReCAPTCHA from 'react-google-recaptcha'
 import toast from 'react-hot-toast'
 import mypic from '../assets/images/Yaakz_Profile-1000-01_(1)-transformed.png'
 
-// checkboot cloudflare
-import { Turnstile } from '@marsidev/react-turnstile';
-
 const drawerWidth = 240
 
 export default function LoginPage() {
@@ -174,17 +171,7 @@ export default function LoginPage() {
                   />
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'center' }}>
-
-                  {/* checkBot ReCAPTCHA */}
-                  {/* <ReCAPTCHA sitekey={""} onChange={checkBot} /> */}
-
-                  {/* checkBot Cloudflare  */}
-                  <Turnstile 
-                    siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY!}
-                    onSuccess={checkBot} 
-                    onExpire={() => checkBot(null)} 
-                  />
-                  
+                  <ReCAPTCHA sitekey="6Lf2yLYpAAAAAG0mtVbNixrG5_AmWnpahONYCEej" onChange={checkBot} />
                 </div>
                 <br />
                 <Button

@@ -233,7 +233,10 @@ export default function TemplateBillSlip(props: TemplateBillSlipprops) {
         {props.coupon != null && (
           <section className="bcs_footer_area">
             <section className="align-center">
-              <span>คูปองส่วนลด</span>
+              <br/>
+              <span style={{fontSize: 20}}>{props.coupon.campaign_name}</span>
+              <br/>
+              <span >คูปองส่วนลด</span>
               <span style={{ fontSize: 24, marginLeft: 5, marginRight: 5, fontWeight: 600 }}>
                 {props.coupon.discount_amount !== '' ? props.coupon.discount_amount : '-'}
               </span>
