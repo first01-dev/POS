@@ -225,7 +225,7 @@ export default function LoginPage() {
       </Box>
       <div className="footer-version">
         {version} &copy; บริษัท เบสท์ คอมเมิร์ซ โซลูชั่นส์ จำกัด. 459 ซอยลาดพร้าว 48 ถนนลาดพร้าว แขวงสามเสนนอก
-        เขตห้วยขวาง กทม. 103101
+        เขตห้วยขวาง กทม. 10310
       </div>
     </div>
   )
