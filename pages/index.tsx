@@ -25,13 +25,18 @@ import Head from 'next/head'
 import Image from 'next/image'
 import { useRouter } from 'next/router'
 import * as React from 'react'
-import ReCAPTCHA from 'react-google-recaptcha'
 import toast from 'react-hot-toast'
 import mypic from '../assets/images/Yaakz_Profile-1000-01_(1)-transformed.png'
+
+// เช็ค Bot ใหม่
+import { Turnstile } from '@marsidev/react-turnstile'
+// เช็ค Bot เดิม 
+// import ReCAPTCHA from 'react-google-recaptcha'
 
 const drawerWidth = 240
 
 export default function LoginPage() {
+
   const router = useRouter()
   const { setStore } = useStore()
   const [openStoreList, setOpenStoreList] = React.useState(false)
@@ -171,7 +176,12 @@ export default function LoginPage() {
                   />
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'center' }}>
-                  <ReCAPTCHA sitekey="6Lf2yLYpAAAAAG0mtVbNixrG5_AmWnpahONYCEej" onChange={checkBot} />
+                  {/* <ReCAPTCHA sitekey="6Lf2yLYpAAAAAG0mtVbNixrG5_AmWnpahONYCEej" onChange={checkBot} /> */}
+                  <Turnstile
+                      siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY!}
+                      onSuccess={checkBot}
+                      onExpire={() => checkBot(null)}
+                  />
                 </div>
                 <br />
                 <Button
